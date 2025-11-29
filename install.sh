@@ -193,6 +193,7 @@ ENCRYPTION_KEY=$ENCRYPTION_KEY
 
 # Server Configuration
 PORT=$BACKEND_PORT
+HOST=0.0.0.0
 NODE_ENV=production
 
 # CORS

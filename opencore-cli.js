@@ -126,6 +126,20 @@ function getFrontendDir(opencoreDir) {
 function startBackend(opencoreDir, background = false) {
   const backendDir = getBackendDir(opencoreDir);
   
+  // Always use HOST=0.0.0.0 for backend to listen on all interfaces
+  const host = '0.0.0.0';
+  
+  // Read port from .env if it exists
+  let port = '3000';
+  const envPath = join(backendDir, '.env');
+  if (fs.existsSync(envPath)) {
+    const envContent = fs.readFileSync(envPath, 'utf8');
+    const portMatch = envContent.match(/PORT=(\d+)/);
+    if (portMatch) {
+      port = portMatch[1];
+    }
+  }
+  
   if (background) {
     const isWindows = process.platform === 'win32';
     const proc = spawn('npm', ['start'], {
@@ -133,23 +147,33 @@ function startBackend(opencoreDir, background = false) {
       stdio: 'ignore',
       detached: !isWindows,
       shell: true,
+      env: { 
+        ...process.env, 
+        HOST: host,
+        PORT: port
+      },
     });
     
     if (!isWindows) {
       proc.unref();
     }
     
-    console.log(`✓ OpenCore Backend started in background (PID: ${proc.pid})`);
+    console.log(`✓ OpenCore Backend started in background on ${host}:${port} (PID: ${proc.pid})`);
     console.log(`  Directory: ${backendDir}`);
     return proc;
   } else {
-    console.log(`Starting OpenCore Backend...`);
+    console.log(`Starting OpenCore Backend on ${host}:${port}...`);
     console.log(`Directory: ${backendDir}`);
     
     const proc = spawn('npm', ['start'], {
       cwd: backendDir,
       stdio: 'inherit',
       shell: true,
+      env: { 
+        ...process.env, 
+        HOST: host,
+        PORT: port
+      },
     });
     
     proc.on('error', (err) => {
