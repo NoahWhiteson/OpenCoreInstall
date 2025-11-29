@@ -149,6 +149,24 @@ BACKEND_PORT=${BACKEND_PORT:-$BACKEND_PORT_DEFAULT}
 read -p "Enter frontend port (default: $FRONTEND_PORT_DEFAULT): " FRONTEND_PORT
 FRONTEND_PORT=${FRONTEND_PORT:-$FRONTEND_PORT_DEFAULT}
 
+# Add firewall rules
+echo ""
+echo "Configuring firewall..."
+if command_exists ufw; then
+    echo "Adding UFW firewall rules..."
+    ufw allow ${BACKEND_PORT}/tcp 2>/dev/null && echo -e "${GREEN}✓ Allowed backend port ${BACKEND_PORT}${NC}" || echo -e "${YELLOW}⚠ Could not add backend port rule (may need sudo)${NC}"
+    ufw allow ${FRONTEND_PORT}/tcp 2>/dev/null && echo -e "${GREEN}✓ Allowed frontend port ${FRONTEND_PORT}${NC}" || echo -e "${YELLOW}⚠ Could not add frontend port rule (may need sudo)${NC}"
+    ufw allow 4962/tcp 2>/dev/null && echo -e "${GREEN}✓ Allowed port 4962/tcp${NC}" || echo -e "${YELLOW}⚠ Could not add port 4962 rule (may need sudo)${NC}"
+elif command_exists firewall-cmd; then
+    echo "Adding firewalld rules..."
+    firewall-cmd --permanent --add-port=${BACKEND_PORT}/tcp 2>/dev/null && echo -e "${GREEN}✓ Allowed backend port ${BACKEND_PORT}${NC}" || echo -e "${YELLOW}⚠ Could not add backend port rule${NC}"
+    firewall-cmd --permanent --add-port=${FRONTEND_PORT}/tcp 2>/dev/null && echo -e "${GREEN}✓ Allowed frontend port ${FRONTEND_PORT}${NC}" || echo -e "${YELLOW}⚠ Could not add frontend port rule${NC}"
+    firewall-cmd --permanent --add-port=4962/tcp 2>/dev/null && echo -e "${GREEN}✓ Allowed port 4962/tcp${NC}" || echo -e "${YELLOW}⚠ Could not add port 4962 rule${NC}"
+    firewall-cmd --reload 2>/dev/null || true
+else
+    echo -e "${YELLOW}⚠ No firewall management tool found (ufw or firewalld). Please manually open ports ${BACKEND_PORT}, ${FRONTEND_PORT}, and 4962${NC}"
+fi
+
 # Get public IP
 read -p "Enter your public IP address (or press Enter to auto-detect): " PUBLIC_IP
 if [ -z "$PUBLIC_IP" ]; then
@@ -222,6 +240,7 @@ if [ -d "$SCRIPT_DIR" ]; then
     
     # Make CLI executable first
     chmod +x "$SCRIPT_DIR/opencore-cli.js" 2>/dev/null || true
+    chmod +x "$SCRIPT_DIR/fix-cli.sh" 2>/dev/null || true
     
     # Try to install CLI globally
     if command_exists npm; then
@@ -233,12 +252,24 @@ if [ -d "$SCRIPT_DIR" ]; then
             echo "Or run directly: node $SCRIPT_DIR/opencore-cli.js"
         }
         
-        # Fix permissions on the linked binary
-        if [ -L /usr/local/bin/opencore ] || [ -f /usr/local/bin/opencore ]; then
-            chmod +x /usr/local/bin/opencore 2>/dev/null || true
-        fi
-        if [ -L ~/.npm-global/bin/opencore ] || [ -f ~/.npm-global/bin/opencore ]; then
-            chmod +x ~/.npm-global/bin/opencore 2>/dev/null || true
+        # Fix permissions on the linked binary (check multiple locations)
+        BIN_PATHS=(
+            "/usr/local/bin/opencore"
+            "/usr/bin/opencore"
+            "$HOME/.npm-global/bin/opencore"
+            "$HOME/.local/bin/opencore"
+        )
+        
+        for BIN_PATH in "${BIN_PATHS[@]}"; do
+            if [ -f "$BIN_PATH" ] || [ -L "$BIN_PATH" ]; then
+                chmod +x "$BIN_PATH" 2>/dev/null && echo -e "${GREEN}✓ Fixed permissions on CLI binary${NC}"
+                break
+            fi
+        done
+        
+        # Run fix script to ensure everything is correct
+        if [ -f "$SCRIPT_DIR/fix-cli.sh" ]; then
+            bash "$SCRIPT_DIR/fix-cli.sh" 2>/dev/null || true
         fi
     fi
     

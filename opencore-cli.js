@@ -5,7 +5,7 @@
  * Manages OpenCore backend and frontend servers
  */
 
-import { spawn } from 'child_process';
+import { spawn, execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
@@ -212,6 +212,67 @@ function startFrontend(opencoreDir, background = false) {
   }
 }
 
+function listProcesses() {
+  const isWindows = process.platform === 'win32';
+  
+  try {
+    if (isWindows) {
+      // Windows: Use tasklist to find node processes
+      const result = execSync('tasklist /FI "IMAGENAME eq node.exe" /FO CSV', { encoding: 'utf8' });
+      const lines = result.split('\n').filter(line => line.includes('node.exe'));
+      
+      console.log('\nOpenCore Processes:');
+      console.log('==================');
+      
+      let found = false;
+      lines.forEach(line => {
+        const parts = line.split(',');
+        if (parts.length >= 2) {
+          const pid = parts[1].replace(/"/g, '');
+          // Try to get command line to identify OpenCore processes
+          try {
+            const cmdResult = execSync(`wmic process where "ProcessId=${pid}" get CommandLine /format:list`, { encoding: 'utf8' });
+            if (cmdResult.includes('opencore') || cmdResult.includes('backend') || cmdResult.includes('frontend')) {
+              const isBackend = cmdResult.includes('backend');
+              const isFrontend = cmdResult.includes('frontend');
+              console.log(`${isBackend ? 'Backend' : isFrontend ? 'Frontend' : 'Unknown'}: PID ${pid}`);
+              found = true;
+            }
+          } catch (e) {
+            // Ignore
+          }
+        }
+      });
+      
+      if (!found) {
+        console.log('No OpenCore processes found');
+      }
+    } else {
+      // Linux/Mac: Use ps to find node processes
+      const result = execSync('ps aux | grep -E "(opencore|backend|frontend)" | grep -v grep', { encoding: 'utf8' });
+      const lines = result.split('\n').filter(line => line.trim());
+      
+      console.log('\nOpenCore Processes:');
+      console.log('==================');
+      
+      if (lines.length === 0) {
+        console.log('No OpenCore processes found');
+      } else {
+        lines.forEach(line => {
+          const parts = line.trim().split(/\s+/);
+          const pid = parts[1];
+          const command = line.includes('backend') ? 'Backend' : line.includes('frontend') ? 'Frontend' : 'Unknown';
+          const portMatch = line.match(/:(\d+)/);
+          const port = portMatch ? portMatch[1] : '';
+          console.log(`${command}: PID ${pid}${port ? ` (Port: ${port})` : ''}`);
+        });
+      }
+    }
+  } catch (error) {
+    console.log('No OpenCore processes found');
+  }
+}
+
 function stopProcess(processName) {
   console.log(`Stopping ${processName}...`);
   
@@ -239,9 +300,78 @@ function stopProcess(processName) {
   });
 }
 
+// Auto-fix CLI permissions and installation
+function autoFixCLI() {
+  try {
+    const isWindows = process.platform === 'win32';
+    
+    // Fix permissions on the CLI file itself
+    if (!isWindows) {
+      try {
+        execSync(`chmod +x "${__filename}"`, { stdio: 'ignore' });
+      } catch (e) {
+        // Ignore errors
+      }
+    }
+    
+    // Try to find and fix the linked binary
+    const npmPaths = [
+      '/usr/local/bin/opencore',
+      '/usr/bin/opencore',
+      join(process.env.HOME || '', '.npm-global/bin/opencore'),
+      join(process.env.HOME || '', '.local/bin/opencore'),
+    ];
+    
+    for (const binPath of npmPaths) {
+      try {
+        if (fs.existsSync(binPath)) {
+          if (!isWindows) {
+            execSync(`chmod +x "${binPath}"`, { stdio: 'ignore' });
+          }
+          return true;
+        }
+      } catch (e) {
+        // Continue to next path
+      }
+    }
+    
+    // Try to re-link if not found
+    try {
+      execSync('npm link', { cwd: __dirname, stdio: 'ignore' });
+      // Fix permissions after linking
+      for (const binPath of npmPaths) {
+        try {
+          if (fs.existsSync(binPath) && !isWindows) {
+            execSync(`chmod +x "${binPath}"`, { stdio: 'ignore' });
+          }
+        } catch (e) {
+          // Ignore
+        }
+      }
+    } catch (e) {
+      // Could not auto-link, that's okay
+    }
+    
+    return false;
+  } catch (error) {
+    return false;
+  }
+}
+
 // Main CLI handler
 const command = process.argv[2];
 const subcommand = process.argv[3];
+
+// Auto-fix on startup if there are permission issues
+if (process.platform !== 'win32') {
+  try {
+    // Check if we can execute
+    fs.accessSync(__filename, fs.constants.X_OK);
+  } catch (e) {
+    // Permission denied, try to fix
+    autoFixCLI();
+  }
+}
 
 if (!command) {
   console.log(`
@@ -309,6 +439,8 @@ if (command === 'backend') {
 } else if (command === 'stop') {
   stopProcess('opencore-backend');
   stopProcess('opencore-frontend');
+} else if (command === 'list') {
+  listProcesses();
 } else if (command === 'help' || command === '--help' || command === '-h') {
   console.log(`
 OpenCore CLI - System Monitoring Platform
@@ -323,6 +455,7 @@ Commands:
   frontend stop    Stop the frontend server
   start            Start both backend and frontend (background)
   stop             Stop both backend and frontend
+  list             List active OpenCore processes
   help             Show this help message
 
 Examples:
@@ -335,7 +468,7 @@ Examples:
 `);
 } else {
   console.error(`Unknown command: ${command}`);
-  console.error('Use: opencore [backend|frontend|start|stop|help]');
+  console.error('Use: opencore [backend|frontend|start|stop|list|help]');
   process.exit(1);
 }
 

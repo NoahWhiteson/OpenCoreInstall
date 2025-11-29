@@ -107,6 +107,42 @@ if ([string]::IsNullOrWhiteSpace($FRONTEND_PORT)) {
     $FRONTEND_PORT = $FRONTEND_PORT_DEFAULT
 }
 
+# Add firewall rules (Windows)
+Write-Host ""
+Write-Host "Configuring firewall..." -ForegroundColor Yellow
+try {
+    # Windows Firewall
+    $firewall = New-Object -ComObject HNetCfg.FwMgr
+    $firewallProfile = $firewall.LocalPolicy.CurrentProfile
+    
+    # Add backend port
+    $backendRule = New-Object -ComObject HNetCfg.FwOpenPort
+    $backendRule.Port = [int]$BACKEND_PORT
+    $backendRule.Protocol = 6  # TCP
+    $backendRule.Name = "OpenCore Backend"
+    $firewallProfile.GloballyOpenPorts.Add($backendRule)
+    Write-Host "✓ Allowed backend port $BACKEND_PORT" -ForegroundColor Green
+    
+    # Add frontend port
+    $frontendRule = New-Object -ComObject HNetCfg.FwOpenPort
+    $frontendRule.Port = [int]$FRONTEND_PORT
+    $frontendRule.Protocol = 6  # TCP
+    $frontendRule.Name = "OpenCore Frontend"
+    $firewallProfile.GloballyOpenPorts.Add($frontendRule)
+    Write-Host "✓ Allowed frontend port $FRONTEND_PORT" -ForegroundColor Green
+    
+    # Add port 4962
+    $port4962Rule = New-Object -ComObject HNetCfg.FwOpenPort
+    $port4962Rule.Port = 4962
+    $port4962Rule.Protocol = 6  # TCP
+    $port4962Rule.Name = "OpenCore Port 4962"
+    $firewallProfile.GloballyOpenPorts.Add($port4962Rule)
+    Write-Host "✓ Allowed port 4962/tcp" -ForegroundColor Green
+} catch {
+    Write-Host "⚠ Could not configure Windows Firewall. You may need to run as Administrator." -ForegroundColor Yellow
+    Write-Host "  Please manually open ports $BACKEND_PORT, $FRONTEND_PORT, and 4962" -ForegroundColor Yellow
+}
+
 # Get public IP
 $PUBLIC_IP = Read-Host "Enter your public IP address (or press Enter to auto-detect)"
 if ([string]::IsNullOrWhiteSpace($PUBLIC_IP)) {
