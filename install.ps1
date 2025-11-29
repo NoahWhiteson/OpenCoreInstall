@@ -187,6 +187,8 @@ Write-Host ""
 Write-Host "Creating .env.local file for frontend..." -ForegroundColor Yellow
 $FRONTEND_ENV = @"
 NEXT_PUBLIC_API_URL=http://${PUBLIC_IP}:${BACKEND_PORT}
+PORT=${FRONTEND_PORT}
+HOST=0.0.0.0
 "@
 
 $FRONTEND_ENV | Out-File -FilePath "frontend\.env.local" -Encoding utf8

@@ -205,6 +205,8 @@ echo ""
 echo "Creating .env.local file for frontend..."
 cat > frontend/.env.local <<EOF
 NEXT_PUBLIC_API_URL=http://${PUBLIC_IP}:${BACKEND_PORT}
+PORT=${FRONTEND_PORT}
+HOST=0.0.0.0
 EOF
 
 echo -e "${GREEN}✓ Frontend .env.local file created${NC}"

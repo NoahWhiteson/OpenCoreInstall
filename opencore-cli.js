@@ -260,7 +260,7 @@ function listProcesses() {
       let found = false;
       
       for (const line of lines) {
-        if (!line.includes('node') || line.includes('grep')) continue;
+        if (!line.includes('node') || line.includes('grep') || line.includes('opencore-cli')) continue;
         
         const parts = line.trim().split(/\s+/);
         if (parts.length < 2) continue;
@@ -268,42 +268,80 @@ function listProcesses() {
         const pid = parts[1];
         const fullCommand = line;
         
+        // Get the working directory of the process
+        let processCwd = '';
+        try {
+          processCwd = execSync(`pwdx ${pid} 2>/dev/null || readlink -f /proc/${pid}/cwd 2>/dev/null || echo ''`, { encoding: 'utf8' }).trim();
+        } catch (e) {
+          // Try alternative method
+          try {
+            processCwd = execSync(`lsof -p ${pid} 2>/dev/null | grep cwd | awk '{print $NF}' || echo ''`, { encoding: 'utf8' }).trim();
+          } catch (e2) {
+            // Ignore
+          }
+        }
+        
         // Check if it's a backend process
         const isBackend = (fullCommand.includes('backend') && (fullCommand.includes('server.js') || fullCommand.includes('npm start'))) ||
-                         (opencoreDir && fullCommand.includes(opencoreDir) && fullCommand.includes('backend'));
+                         (opencoreDir && (fullCommand.includes(opencoreDir + '/backend') || processCwd.includes('/backend'))) ||
+                         (processCwd && processCwd.endsWith('/backend'));
         
         // Check if it's a frontend process
         const isFrontend = (fullCommand.includes('frontend') && (fullCommand.includes('next start') || fullCommand.includes('npm start'))) ||
-                          (opencoreDir && fullCommand.includes(opencoreDir) && fullCommand.includes('frontend'));
+                          (opencoreDir && (fullCommand.includes(opencoreDir + '/frontend') || processCwd.includes('/frontend'))) ||
+                          (processCwd && processCwd.endsWith('/frontend')) ||
+                          (fullCommand.includes('next') && fullCommand.includes('start'));
         
         if (isBackend || isFrontend) {
           const type = isBackend ? 'Backend' : 'Frontend';
           
-          // Try to extract port from command or check lsof
+          // Try to extract port from command or check lsof/netstat/ss
           let port = '';
           try {
-            const portMatch = fullCommand.match(/PORT[=\s]+(\d+)/i) || fullCommand.match(/:(\d{4,5})/);
+            // First try to get port from command line
+            const portMatch = fullCommand.match(/PORT[=\s]+(\d+)/i) || fullCommand.match(/-p\s+(\d+)/) || fullCommand.match(/:(\d{4,5})/);
             if (portMatch) {
               port = portMatch[1];
             } else {
-              // Use lsof to find the port
-              const lsofResult = execSync(`lsof -p ${pid} -iTCP -sTCP:LISTEN -n -P 2>/dev/null | grep LISTEN || netstat -tlnp 2>/dev/null | grep ${pid} || ss -tlnp 2>/dev/null | grep ${pid}`, { encoding: 'utf8' });
-              const portMatch2 = lsofResult.match(/:(\d{4,5})/);
-              if (portMatch2) {
-                port = portMatch2[1];
+              // Use lsof/netstat/ss to find the listening port
+              try {
+                const lsofResult = execSync(`lsof -p ${pid} -iTCP -sTCP:LISTEN -n -P 2>/dev/null | grep LISTEN`, { encoding: 'utf8' });
+                const portMatch2 = lsofResult.match(/:(\d{4,5})/);
+                if (portMatch2) {
+                  port = portMatch2[1];
+                }
+              } catch (e1) {
+                try {
+                  const netstatResult = execSync(`netstat -tlnp 2>/dev/null | grep ${pid}`, { encoding: 'utf8' });
+                  const portMatch3 = netstatResult.match(/:(\d{4,5})/);
+                  if (portMatch3) {
+                    port = portMatch3[1];
+                  }
+                } catch (e2) {
+                  try {
+                    const ssResult = execSync(`ss -tlnp 2>/dev/null | grep pid=${pid}`, { encoding: 'utf8' });
+                    const portMatch4 = ssResult.match(/:(\d{4,5})/);
+                    if (portMatch4) {
+                      port = portMatch4[1];
+                    }
+                  } catch (e3) {
+                    // Ignore
+                  }
+                }
               }
             }
           } catch (e) {
             // Ignore
           }
           
-          console.log(`${type}: PID ${pid}${port ? ` (Port: ${port})` : ''}`);
+          console.log(`${type}: PID ${pid}${port ? ` (Port: ${port})` : ''}${processCwd ? ` [${processCwd}]` : ''}`);
           found = true;
         }
       }
       
       if (!found) {
         console.log('No OpenCore processes found');
+        console.log('Note: Make sure processes are running with "opencore start"');
       }
     }
   } catch (error) {
