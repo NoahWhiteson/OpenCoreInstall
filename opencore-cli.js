@@ -123,26 +123,45 @@ function getFrontendDir(opencoreDir) {
   return join(opencoreDir, 'frontend');
 }
 
-function startBackend(opencoreDir) {
+function startBackend(opencoreDir, background = false) {
   const backendDir = getBackendDir(opencoreDir);
-  console.log(`Starting OpenCore Backend...`);
-  console.log(`Directory: ${backendDir}`);
   
-  const proc = spawn('npm', ['start'], {
-    cwd: backendDir,
-    stdio: 'inherit',
-    shell: true,
-  });
-  
-  proc.on('error', (err) => {
-    console.error(`Failed to start backend: ${err.message}`);
-    process.exit(1);
-  });
-  
-  return proc;
+  if (background) {
+    const isWindows = process.platform === 'win32';
+    const proc = spawn('npm', ['start'], {
+      cwd: backendDir,
+      stdio: 'ignore',
+      detached: !isWindows,
+      shell: true,
+    });
+    
+    if (!isWindows) {
+      proc.unref();
+    }
+    
+    console.log(`✓ OpenCore Backend started in background (PID: ${proc.pid})`);
+    console.log(`  Directory: ${backendDir}`);
+    return proc;
+  } else {
+    console.log(`Starting OpenCore Backend...`);
+    console.log(`Directory: ${backendDir}`);
+    
+    const proc = spawn('npm', ['start'], {
+      cwd: backendDir,
+      stdio: 'inherit',
+      shell: true,
+    });
+    
+    proc.on('error', (err) => {
+      console.error(`Failed to start backend: ${err.message}`);
+      process.exit(1);
+    });
+    
+    return proc;
+  }
 }
 
-function startFrontend(opencoreDir) {
+function startFrontend(opencoreDir, background = false) {
   const frontendDir = getFrontendDir(opencoreDir);
   
   // Read port from .env.local if it exists
@@ -156,22 +175,41 @@ function startFrontend(opencoreDir) {
     }
   }
   
-  console.log(`Starting OpenCore Frontend on port ${port}...`);
-  console.log(`Directory: ${frontendDir}`);
-  
-  const proc = spawn('npm', ['start'], {
-    cwd: frontendDir,
-    stdio: 'inherit',
-    shell: true,
-    env: { ...process.env, PORT: port },
-  });
-  
-  proc.on('error', (err) => {
-    console.error(`Failed to start frontend: ${err.message}`);
-    process.exit(1);
-  });
-  
-  return proc;
+  if (background) {
+    const isWindows = process.platform === 'win32';
+    const proc = spawn('npm', ['start'], {
+      cwd: frontendDir,
+      stdio: 'ignore',
+      detached: !isWindows,
+      shell: true,
+      env: { ...process.env, PORT: port },
+    });
+    
+    if (!isWindows) {
+      proc.unref();
+    }
+    
+    console.log(`✓ OpenCore Frontend started in background on port ${port} (PID: ${proc.pid})`);
+    console.log(`  Directory: ${frontendDir}`);
+    return proc;
+  } else {
+    console.log(`Starting OpenCore Frontend on port ${port}...`);
+    console.log(`Directory: ${frontendDir}`);
+    
+    const proc = spawn('npm', ['start'], {
+      cwd: frontendDir,
+      stdio: 'inherit',
+      shell: true,
+      env: { ...process.env, PORT: port },
+    });
+    
+    proc.on('error', (err) => {
+      console.error(`Failed to start frontend: ${err.message}`);
+      process.exit(1);
+    });
+    
+    return proc;
+  }
 }
 
 function stopProcess(processName) {
@@ -242,7 +280,7 @@ if (!opencoreDir) {
 // Handle commands
 if (command === 'backend') {
   if (subcommand === 'start') {
-    startBackend(opencoreDir);
+    startBackend(opencoreDir, true); // Run in background
   } else if (subcommand === 'stop') {
     stopProcess('opencore-backend');
   } else {
@@ -252,7 +290,7 @@ if (command === 'backend') {
   }
 } else if (command === 'frontend') {
   if (subcommand === 'start') {
-    startFrontend(opencoreDir);
+    startFrontend(opencoreDir, true); // Run in background
   } else if (subcommand === 'stop') {
     stopProcess('opencore-frontend');
   } else {
@@ -262,16 +300,42 @@ if (command === 'backend') {
   }
 } else if (command === 'start') {
   console.log('Starting both backend and frontend...');
-  startBackend(opencoreDir);
+  startBackend(opencoreDir, true); // Run in background
   setTimeout(() => {
-    startFrontend(opencoreDir);
-  }, 2000);
+    startFrontend(opencoreDir, true); // Run in background
+  }, 1000);
+  console.log('\n✓ Both servers started in background');
+  console.log('Use "opencore stop" to stop them');
 } else if (command === 'stop') {
   stopProcess('opencore-backend');
   stopProcess('opencore-frontend');
+} else if (command === 'help' || command === '--help' || command === '-h') {
+  console.log(`
+OpenCore CLI - System Monitoring Platform
+
+Usage:
+  opencore <command> [options]
+
+Commands:
+  backend start    Start the backend server (background)
+  backend stop     Stop the backend server
+  frontend start   Start the frontend server (background)
+  frontend stop    Stop the frontend server
+  start            Start both backend and frontend (background)
+  stop             Stop both backend and frontend
+  help             Show this help message
+
+Examples:
+  opencore backend start
+  opencore frontend start
+  opencore backend stop
+  opencore frontend stop
+  opencore start
+  opencore stop
+`);
 } else {
   console.error(`Unknown command: ${command}`);
-  console.error('Use: opencore [backend|frontend|start|stop]');
+  console.error('Use: opencore [backend|frontend|start|stop|help]');
   process.exit(1);
 }
 

@@ -220,19 +220,30 @@ if [ -d "$SCRIPT_DIR" ]; then
     cd "$SCRIPT_DIR"
     npm install --silent 2>/dev/null || true
     
+    # Make CLI executable first
+    chmod +x "$SCRIPT_DIR/opencore-cli.js" 2>/dev/null || true
+    
     # Try to install CLI globally
     if command_exists npm; then
         echo "Installing OpenCore CLI globally..."
+        cd "$SCRIPT_DIR"
         npm link 2>/dev/null || {
             echo -e "${YELLOW}Note: Could not install CLI globally. To install manually:${NC}"
             echo "  cd $SCRIPT_DIR && npm link"
             echo "Or run directly: node $SCRIPT_DIR/opencore-cli.js"
         }
+        
+        # Fix permissions on the linked binary
+        if [ -L /usr/local/bin/opencore ] || [ -f /usr/local/bin/opencore ]; then
+            chmod +x /usr/local/bin/opencore 2>/dev/null || true
+        fi
+        if [ -L ~/.npm-global/bin/opencore ] || [ -f ~/.npm-global/bin/opencore ]; then
+            chmod +x ~/.npm-global/bin/opencore 2>/dev/null || true
+        fi
     fi
     
     # Make scripts executable
     chmod +x "$SCRIPT_DIR/start-backend.sh" "$SCRIPT_DIR/start-frontend.sh" 2>/dev/null || true
-    chmod +x "$SCRIPT_DIR/opencore-cli.js" 2>/dev/null || true
     
     # Save installation location to CLI config
     echo "Saving installation location..."
