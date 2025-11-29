@@ -233,6 +233,17 @@ if [ -d "$SCRIPT_DIR" ]; then
     # Make scripts executable
     chmod +x "$SCRIPT_DIR/start-backend.sh" "$SCRIPT_DIR/start-frontend.sh" 2>/dev/null || true
     chmod +x "$SCRIPT_DIR/opencore-cli.js" 2>/dev/null || true
+    
+    # Save installation location to CLI config
+    echo "Saving installation location..."
+    mkdir -p ~/.opencore
+    cat > ~/.opencore/config.json <<EOF
+{
+  "installPath": "$INSTALL_DIR",
+  "updatedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+}
+EOF
+    echo -e "${GREEN}✓ Installation location saved${NC}"
 fi
 
 echo ""

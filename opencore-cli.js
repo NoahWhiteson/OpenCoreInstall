@@ -9,22 +9,74 @@ import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
+import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// Get config file path
+function getConfigPath() {
+  const homeDir = os.homedir();
+  const configDir = join(homeDir, '.opencore');
+  const configFile = join(configDir, 'config.json');
+  return { configDir, configFile };
+}
+
+// Save OpenCore installation location
+function saveInstallLocation(opencoreDir) {
+  try {
+    const { configDir, configFile } = getConfigPath();
+    if (!fs.existsSync(configDir)) {
+      fs.mkdirSync(configDir, { recursive: true });
+    }
+    const config = {
+      installPath: opencoreDir,
+      updatedAt: new Date().toISOString()
+    };
+    fs.writeFileSync(configFile, JSON.stringify(config, null, 2), 'utf8');
+    return true;
+  } catch (error) {
+    console.error('Error saving install location:', error);
+    return false;
+  }
+}
+
+// Load OpenCore installation location from config
+function loadInstallLocation() {
+  try {
+    const { configFile } = getConfigPath();
+    if (fs.existsSync(configFile)) {
+      const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+      if (config.installPath && fs.existsSync(join(config.installPath, 'backend', 'package.json'))) {
+        return config.installPath;
+      }
+    }
+  } catch (error) {
+    // Config file doesn't exist or is invalid, continue with search
+  }
+  return null;
+}
+
 // Find OpenCore installation directory
 function findOpenCoreDir() {
+  // First, try to load from saved config
+  const savedLocation = loadInstallLocation();
+  if (savedLocation) {
+    return savedLocation;
+  }
+  
   let currentDir = process.cwd();
   const maxDepth = 10;
   let depth = 0;
   
-  // First, check current directory and parents
+  // Check current directory and parents
   while (depth < maxDepth) {
     const backendPath = join(currentDir, 'backend', 'package.json');
     const frontendPath = join(currentDir, 'frontend', 'package.json');
     
     if (fs.existsSync(backendPath) && fs.existsSync(frontendPath)) {
+      // Save this location for future use
+      saveInstallLocation(currentDir);
       return currentDir;
     }
     
@@ -44,6 +96,8 @@ function findOpenCoreDir() {
   
   for (const path of commonPaths) {
     if (fs.existsSync(join(path, 'backend', 'package.json'))) {
+      // Save this location for future use
+      saveInstallLocation(path);
       return path;
     }
   }
@@ -53,6 +107,7 @@ function findOpenCoreDir() {
   if (installDir.includes('install')) {
     const parentDir = join(installDir, '..');
     if (fs.existsSync(join(parentDir, 'backend', 'package.json'))) {
+      saveInstallLocation(parentDir);
       return parentDir;
     }
   }
