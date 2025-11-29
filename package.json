@@ -1,0 +1,21 @@
+{
+  "name": "opencore-cli",
+  "version": "1.0.0",
+  "description": "OpenCore CLI tool for managing backend and frontend servers",
+  "type": "module",
+  "main": "opencore-cli.js",
+  "bin": {
+    "opencore": "./opencore-cli.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "opencore",
+    "cli",
+    "monitoring"
+  ],
+  "author": "",
+  "license": "ISC"
+}
+

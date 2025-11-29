@@ -24,7 +24,20 @@ command_exists() {
 # Check prerequisites
 echo "Checking prerequisites..."
 if ! command_exists node; then
-    echo -e "${RED}Error: Node.js is not installed. Please install Node.js 18+ first.${NC}"
+    echo -e "${RED}Error: Node.js is not installed. Please install Node.js 20.9.0+ first.${NC}"
+    exit 1
+fi
+
+# Check Node.js version
+NODE_VERSION=$(node -v | cut -d'v' -f2)
+NODE_MAJOR=$(echo $NODE_VERSION | cut -d'.' -f1)
+NODE_MINOR=$(echo $NODE_VERSION | cut -d'.' -f2)
+NODE_PATCH=$(echo $NODE_VERSION | cut -d'.' -f3)
+
+if [ "$NODE_MAJOR" -lt 20 ] || ([ "$NODE_MAJOR" -eq 20 ] && [ "$NODE_MINOR" -lt 9 ]); then
+    echo -e "${RED}Error: Node.js version 20.9.0 or higher is required.${NC}"
+    echo -e "${RED}Current version: $(node -v)${NC}"
+    echo -e "${YELLOW}Please upgrade Node.js: https://nodejs.org/${NC}"
     exit 1
 fi
 
@@ -38,7 +51,7 @@ if ! command_exists git; then
     exit 1
 fi
 
-echo -e "${GREEN}✓ Prerequisites check passed${NC}"
+echo -e "${GREEN}✓ Prerequisites check passed (Node.js $(node -v))${NC}"
 echo ""
 
 # Get installation directory
@@ -58,7 +71,17 @@ if [ -d "$INSTALL_DIR" ]; then
 fi
 
 mkdir -p "$INSTALL_DIR"
-cd "$INSTALL_DIR"
+
+# Check if INSTALL_DIR already contains OpenCore
+if [ -d "$INSTALL_DIR/backend" ] && [ -d "$INSTALL_DIR/frontend" ]; then
+    echo -e "${YELLOW}OpenCore already exists in $INSTALL_DIR${NC}"
+    read -p "Do you want to reinstall? (y/N): " REINSTALL
+    if [[ ! $REINSTALL =~ ^[Yy]$ ]]; then
+        echo "Installation cancelled."
+        exit 0
+    fi
+    rm -rf "$INSTALL_DIR/backend" "$INSTALL_DIR/frontend"
+fi
 
 # Get GitHub repository URL
 read -p "Enter GitHub repository URL (default: https://github.com/NoahWhiteson/OpenCore.git): " GITHUB_URL
@@ -66,9 +89,11 @@ GITHUB_URL=${GITHUB_URL:-https://github.com/NoahWhiteson/OpenCore.git}
 
 echo ""
 echo "Cloning repository..."
+cd "$INSTALL_DIR"
 git clone "$GITHUB_URL" temp_repo
 mv temp_repo/* temp_repo/.* . 2>/dev/null || true
-rmdir temp_repo
+rmdir temp_repo 2>/dev/null || rm -rf temp_repo
+cd "$INSTALL_DIR"
 
 echo -e "${GREEN}✓ Repository cloned${NC}"
 echo ""
@@ -167,8 +192,25 @@ npm run build
 cd ..
 
 echo ""
+echo "Installing OpenCore CLI..."
+cd "$INSTALL_DIR/install" 2>/dev/null || cd "$(dirname "$0")"
+npm install --silent 2>/dev/null || true
+
+# Install CLI globally or create symlink
+if command_exists npm; then
+    echo "Installing OpenCore CLI..."
+    cd "$INSTALL_DIR/install"
+    npm link 2>/dev/null || {
+        echo -e "${YELLOW}Note: Could not install CLI globally. You can use:${NC}"
+        echo "  cd $INSTALL_DIR/install && npm link"
+        echo "Or run directly: node $INSTALL_DIR/install/opencore-cli.js"
+    }
+fi
+
+echo ""
 echo "Making start scripts executable..."
-chmod +x install/start-backend.sh install/start-frontend.sh 2>/dev/null || true
+chmod +x "$INSTALL_DIR/install/start-backend.sh" "$INSTALL_DIR/install/start-frontend.sh" 2>/dev/null || true
+chmod +x "$INSTALL_DIR/install/opencore-cli.js" 2>/dev/null || true
 
 echo ""
 echo "=========================================="
@@ -180,13 +222,22 @@ echo "  Backend Port: $BACKEND_PORT"
 echo "  Frontend Port: $FRONTEND_PORT"
 echo "  Public URL: http://${PUBLIC_IP}:${FRONTEND_PORT}"
 echo "  Admin Username: $ADMIN_USERNAME"
+echo "  Installation Directory: $INSTALL_DIR"
 echo ""
-echo "To start the servers:"
+echo "To start the servers, use the OpenCore CLI:"
+echo "  opencore backend start"
+echo "  opencore frontend start"
+echo ""
+echo "Or start both:"
+echo "  opencore start"
+echo ""
+echo "To stop servers:"
+echo "  opencore backend stop"
+echo "  opencore frontend stop"
+echo "  opencore stop"
+echo ""
+echo "If the CLI is not available, you can also:"
 echo "  1. Backend: cd $INSTALL_DIR/backend && npm start"
 echo "  2. Frontend: cd $INSTALL_DIR/frontend && npm start"
-echo ""
-echo "Or use the provided start scripts:"
-echo "  ./start-backend.sh"
-echo "  ./start-frontend.sh"
 echo ""
 
