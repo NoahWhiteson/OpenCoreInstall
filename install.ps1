@@ -175,6 +175,41 @@ npm run build
 Set-Location ..
 
 Write-Host ""
+Write-Host "Installing OpenCore CLI..." -ForegroundColor Yellow
+
+# Find the install directory (where this script is located)
+$SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+if (Test-Path $SCRIPT_DIR) {
+    Set-Location $SCRIPT_DIR
+    npm install --silent 2>$null
+
+    # Try to install CLI globally
+    if (Get-Command npm -ErrorAction SilentlyContinue) {
+        Write-Host "Installing OpenCore CLI globally..." -ForegroundColor Yellow
+        npm link 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Note: Could not install CLI globally. To install manually:" -ForegroundColor Yellow
+            Write-Host "  cd $SCRIPT_DIR; npm link"
+        }
+    }
+    
+    # Save installation location to CLI config
+    Write-Host "Saving installation location..." -ForegroundColor Yellow
+    $configDir = Join-Path $env:USERPROFILE ".opencore"
+    if (-not (Test-Path $configDir)) {
+        New-Item -ItemType Directory -Path $configDir | Out-Null
+    }
+    $configFile = Join-Path $configDir "config.json"
+    $config = @{
+        installPath = $INSTALL_DIR
+        updatedAt = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
+    } | ConvertTo-Json
+    $config | Out-File -FilePath $configFile -Encoding utf8
+    Write-Host "✓ Installation location saved" -ForegroundColor Green
+}
+
+Write-Host ""
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host "  Installation Complete!" -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Cyan
@@ -184,8 +219,21 @@ Write-Host "  Backend Port: $BACKEND_PORT"
 Write-Host "  Frontend Port: $FRONTEND_PORT"
 Write-Host "  Public URL: http://${PUBLIC_IP}:${FRONTEND_PORT}"
 Write-Host "  Admin Username: $ADMIN_USERNAME"
+Write-Host "  Installation Directory: $INSTALL_DIR"
 Write-Host ""
-Write-Host "To start the servers:"
+Write-Host "To start the servers, use the OpenCore CLI:"
+Write-Host "  opencore backend start"
+Write-Host "  opencore frontend start"
+Write-Host ""
+Write-Host "Or start both:"
+Write-Host "  opencore start"
+Write-Host ""
+Write-Host "To stop servers:"
+Write-Host "  opencore backend stop"
+Write-Host "  opencore frontend stop"
+Write-Host "  opencore stop"
+Write-Host ""
+Write-Host "If the CLI is not available, you can also:"
 Write-Host "  1. Backend: cd $INSTALL_DIR\backend; npm start"
 Write-Host "  2. Frontend: cd $INSTALL_DIR\frontend; npm start"
 Write-Host ""
