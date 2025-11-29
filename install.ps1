@@ -143,16 +143,23 @@ try {
     Write-Host "  Please manually open ports $BACKEND_PORT, $FRONTEND_PORT, and 4962" -ForegroundColor Yellow
 }
 
-# Get public IP
-$PUBLIC_IP = Read-Host "Enter your public IP address (or press Enter to auto-detect)"
+# Get public IP (IPv4 only)
+$PUBLIC_IP = Read-Host "Enter your public IPv4 address (or press Enter to auto-detect)"
 if ([string]::IsNullOrWhiteSpace($PUBLIC_IP)) {
     try {
-        $PUBLIC_IP = (Invoke-WebRequest -Uri "https://api.ipify.org" -UseBasicParsing).Content.Trim()
-        Write-Host "Auto-detected IP: $PUBLIC_IP" -ForegroundColor Green
+        # Try to get IPv4 address specifically
+        $PUBLIC_IP = (Invoke-WebRequest -Uri "https://api.ipify.org?format=text" -UseBasicParsing).Content.Trim()
+        Write-Host "Auto-detected IPv4: $PUBLIC_IP" -ForegroundColor Green
     } catch {
         $PUBLIC_IP = "localhost"
         Write-Host "Could not auto-detect IP, using localhost" -ForegroundColor Yellow
     }
+}
+
+# Validate it's an IPv4 address (contains dots, not colons)
+if ($PUBLIC_IP -match ":" -and $PUBLIC_IP -notmatch "\.") {
+    Write-Host "⚠ Warning: Detected IPv6 address. Please enter an IPv4 address (e.g., 72.61.3.42)" -ForegroundColor Yellow
+    $PUBLIC_IP = Read-Host "Enter your public IPv4 address"
 }
 
 # Allowed origins
@@ -194,6 +201,8 @@ HOST=0.0.0.0
 
 $FRONTEND_ENV | Out-File -FilePath "frontend\.env.local" -Encoding utf8
 Write-Host "✓ Frontend .env.local file created" -ForegroundColor Green
+Write-Host "⚠ Note: If you change NEXT_PUBLIC_API_URL, you must rebuild the frontend:" -ForegroundColor Yellow
+Write-Host "   cd frontend; npm run build" -ForegroundColor Yellow
 
 Write-Host ""
 Write-Host "Installing backend dependencies..." -ForegroundColor Yellow

@@ -167,11 +167,18 @@ else
     echo -e "${YELLOW}⚠ No firewall management tool found (ufw or firewalld). Please manually open ports ${BACKEND_PORT}, ${FRONTEND_PORT}, and 4962${NC}"
 fi
 
-# Get public IP
-read -p "Enter your public IP address (or press Enter to auto-detect): " PUBLIC_IP
+# Get public IP (IPv4 only)
+read -p "Enter your public IPv4 address (or press Enter to auto-detect): " PUBLIC_IP
 if [ -z "$PUBLIC_IP" ]; then
-    PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || curl -s icanhazip.com 2>/dev/null || echo "localhost")
-    echo "Auto-detected IP: $PUBLIC_IP"
+    # Try to get IPv4 address specifically
+    PUBLIC_IP=$(curl -s -4 ifconfig.me 2>/dev/null || curl -s -4 icanhazip.com 2>/dev/null || curl -s ifconfig.me 2>/dev/null || curl -s icanhazip.com 2>/dev/null || echo "localhost")
+    echo "Auto-detected IPv4: $PUBLIC_IP"
+fi
+
+# Validate it's an IPv4 address (contains dots, not colons)
+if [[ "$PUBLIC_IP" == *":"* ]] && [[ "$PUBLIC_IP" != *"."* ]]; then
+    echo -e "${YELLOW}⚠ Warning: Detected IPv6 address. Please enter an IPv4 address (e.g., 72.61.3.42)${NC}"
+    read -p "Enter your public IPv4 address: " PUBLIC_IP
 fi
 
 # Allowed origins
