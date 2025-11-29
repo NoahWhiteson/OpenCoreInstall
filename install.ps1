@@ -95,7 +95,7 @@ $ENCRYPTION_KEY = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 64 
 
 # Port configuration - generate unique ports
 $BACKEND_PORT_DEFAULT = (3000 + (Get-Random -Maximum 1000))
-$FRONTEND_PORT_DEFAULT = (4000 + (Get-Random -Maximum 1000))
+$FRONTEND_PORT_DEFAULT = 4962
 
 $BACKEND_PORT = Read-Host "Enter backend port (default: $BACKEND_PORT_DEFAULT)"
 if ([string]::IsNullOrWhiteSpace($BACKEND_PORT)) {

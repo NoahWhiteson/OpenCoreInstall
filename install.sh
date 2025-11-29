@@ -141,7 +141,7 @@ ENCRYPTION_KEY=$(openssl rand -hex 32 2>/dev/null || node -e "console.log(requir
 
 # Port configuration - generate unique ports
 BACKEND_PORT_DEFAULT=$((3000 + RANDOM % 1000))
-FRONTEND_PORT_DEFAULT=$((4000 + RANDOM % 1000))
+FRONTEND_PORT_DEFAULT=4962
 
 read -p "Enter backend port (default: $BACKEND_PORT_DEFAULT): " BACKEND_PORT
 BACKEND_PORT=${BACKEND_PORT:-$BACKEND_PORT_DEFAULT}

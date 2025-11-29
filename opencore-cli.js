@@ -214,6 +214,10 @@ function startFrontend(opencoreDir, background = false) {
 
 function listProcesses() {
   const isWindows = process.platform === 'win32';
+  const opencoreDir = findOpenCoreDir();
+  
+  console.log('\nOpenCore Processes:');
+  console.log('==================');
   
   try {
     if (isWindows) {
@@ -221,51 +225,85 @@ function listProcesses() {
       const result = execSync('tasklist /FI "IMAGENAME eq node.exe" /FO CSV', { encoding: 'utf8' });
       const lines = result.split('\n').filter(line => line.includes('node.exe'));
       
-      console.log('\nOpenCore Processes:');
-      console.log('==================');
-      
       let found = false;
-      lines.forEach(line => {
+      for (const line of lines) {
         const parts = line.split(',');
         if (parts.length >= 2) {
           const pid = parts[1].replace(/"/g, '');
-          // Try to get command line to identify OpenCore processes
           try {
-            const cmdResult = execSync(`wmic process where "ProcessId=${pid}" get CommandLine /format:list`, { encoding: 'utf8' });
-            if (cmdResult.includes('opencore') || cmdResult.includes('backend') || cmdResult.includes('frontend')) {
-              const isBackend = cmdResult.includes('backend');
-              const isFrontend = cmdResult.includes('frontend');
-              console.log(`${isBackend ? 'Backend' : isFrontend ? 'Frontend' : 'Unknown'}: PID ${pid}`);
+            const cmdResult = execSync(`wmic process where "ProcessId=${pid}" get CommandLine,ExecutablePath /format:list`, { encoding: 'utf8' });
+            const isBackend = cmdResult.includes('backend') && (cmdResult.includes('server.js') || cmdResult.includes('npm start'));
+            const isFrontend = cmdResult.includes('frontend') && (cmdResult.includes('next start') || cmdResult.includes('npm start'));
+            
+            if (isBackend || isFrontend) {
+              const type = isBackend ? 'Backend' : 'Frontend';
+              // Try to extract port
+              const portMatch = cmdResult.match(/PORT[=\s]+(\d+)/i) || cmdResult.match(/:(\d{4,5})/);
+              const port = portMatch ? portMatch[1] : '';
+              console.log(`${type}: PID ${pid}${port ? ` (Port: ${port})` : ''}`);
               found = true;
             }
           } catch (e) {
             // Ignore
           }
         }
-      });
+      }
       
       if (!found) {
         console.log('No OpenCore processes found');
       }
     } else {
-      // Linux/Mac: Use ps to find node processes
-      const result = execSync('ps aux | grep -E "(opencore|backend|frontend)" | grep -v grep', { encoding: 'utf8' });
-      const lines = result.split('\n').filter(line => line.trim());
+      // Linux/Mac: Use ps to find node processes and check their working directory
+      const result = execSync('ps aux', { encoding: 'utf8' });
+      const lines = result.split('\n');
       
-      console.log('\nOpenCore Processes:');
-      console.log('==================');
+      let found = false;
       
-      if (lines.length === 0) {
+      for (const line of lines) {
+        if (!line.includes('node') || line.includes('grep')) continue;
+        
+        const parts = line.trim().split(/\s+/);
+        if (parts.length < 2) continue;
+        
+        const pid = parts[1];
+        const fullCommand = line;
+        
+        // Check if it's a backend process
+        const isBackend = (fullCommand.includes('backend') && (fullCommand.includes('server.js') || fullCommand.includes('npm start'))) ||
+                         (opencoreDir && fullCommand.includes(opencoreDir) && fullCommand.includes('backend'));
+        
+        // Check if it's a frontend process
+        const isFrontend = (fullCommand.includes('frontend') && (fullCommand.includes('next start') || fullCommand.includes('npm start'))) ||
+                          (opencoreDir && fullCommand.includes(opencoreDir) && fullCommand.includes('frontend'));
+        
+        if (isBackend || isFrontend) {
+          const type = isBackend ? 'Backend' : 'Frontend';
+          
+          // Try to extract port from command or check lsof
+          let port = '';
+          try {
+            const portMatch = fullCommand.match(/PORT[=\s]+(\d+)/i) || fullCommand.match(/:(\d{4,5})/);
+            if (portMatch) {
+              port = portMatch[1];
+            } else {
+              // Use lsof to find the port
+              const lsofResult = execSync(`lsof -p ${pid} -iTCP -sTCP:LISTEN -n -P 2>/dev/null | grep LISTEN || netstat -tlnp 2>/dev/null | grep ${pid} || ss -tlnp 2>/dev/null | grep ${pid}`, { encoding: 'utf8' });
+              const portMatch2 = lsofResult.match(/:(\d{4,5})/);
+              if (portMatch2) {
+                port = portMatch2[1];
+              }
+            }
+          } catch (e) {
+            // Ignore
+          }
+          
+          console.log(`${type}: PID ${pid}${port ? ` (Port: ${port})` : ''}`);
+          found = true;
+        }
+      }
+      
+      if (!found) {
         console.log('No OpenCore processes found');
-      } else {
-        lines.forEach(line => {
-          const parts = line.trim().split(/\s+/);
-          const pid = parts[1];
-          const command = line.includes('backend') ? 'Backend' : line.includes('frontend') ? 'Frontend' : 'Unknown';
-          const portMatch = line.match(/:(\d+)/);
-          const port = portMatch ? portMatch[1] : '';
-          console.log(`${command}: PID ${pid}${port ? ` (Port: ${port})` : ''}`);
-        });
       }
     }
   } catch (error) {
