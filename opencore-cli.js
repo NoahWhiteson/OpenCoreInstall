@@ -19,6 +19,7 @@ function findOpenCoreDir() {
   const maxDepth = 10;
   let depth = 0;
   
+  // First, check current directory and parents
   while (depth < maxDepth) {
     const backendPath = join(currentDir, 'backend', 'package.json');
     const frontendPath = join(currentDir, 'frontend', 'package.json');
@@ -38,11 +39,21 @@ function findOpenCoreDir() {
     '/opencore',
     '/opt/opencore',
     join(process.env.HOME || process.env.USERPROFILE || '', 'opencore'),
+    join(process.env.HOME || process.env.USERPROFILE || '', 'OpenCore'),
   ];
   
   for (const path of commonPaths) {
     if (fs.existsSync(join(path, 'backend', 'package.json'))) {
       return path;
+    }
+  }
+  
+  // Check if we're in an install directory, look for parent
+  const installDir = __dirname;
+  if (installDir.includes('install')) {
+    const parentDir = join(installDir, '..');
+    if (fs.existsSync(join(parentDir, 'backend', 'package.json'))) {
+      return parentDir;
     }
   }
   

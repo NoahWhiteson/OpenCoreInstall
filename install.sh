@@ -54,28 +54,20 @@ fi
 echo -e "${GREEN}✓ Prerequisites check passed (Node.js $(node -v))${NC}"
 echo ""
 
-# Get installation directory
+# Get installation directory (where OpenCore will be installed)
 read -p "Enter installation directory (default: ./opencore): " INSTALL_DIR
 INSTALL_DIR=${INSTALL_DIR:-./opencore}
+INSTALL_DIR=$(cd "$INSTALL_DIR" 2>/dev/null && pwd || echo "$(pwd)/${INSTALL_DIR#./}")
 
-if [ -d "$INSTALL_DIR" ]; then
-    echo -e "${YELLOW}Directory $INSTALL_DIR already exists.${NC}"
-    read -p "Do you want to remove it and reinstall? (y/N): " REMOVE_DIR
-    if [[ $REMOVE_DIR =~ ^[Yy]$ ]]; then
-        rm -rf "$INSTALL_DIR"
-        echo -e "${GREEN}Removed existing directory${NC}"
-    else
-        echo "Installation cancelled."
-        exit 0
-    fi
+# Convert to absolute path
+if [[ "$INSTALL_DIR" != /* ]]; then
+    INSTALL_DIR="$(pwd)/$INSTALL_DIR"
 fi
-
-mkdir -p "$INSTALL_DIR"
 
 # Check if INSTALL_DIR already contains OpenCore
 if [ -d "$INSTALL_DIR/backend" ] && [ -d "$INSTALL_DIR/frontend" ]; then
     echo -e "${YELLOW}OpenCore already exists in $INSTALL_DIR${NC}"
-    read -p "Do you want to reinstall? (y/N): " REINSTALL
+    read -p "Do you want to remove it and reinstall? (y/N): " REINSTALL
     if [[ ! $REINSTALL =~ ^[Yy]$ ]]; then
         echo "Installation cancelled."
         exit 0
@@ -83,16 +75,42 @@ if [ -d "$INSTALL_DIR/backend" ] && [ -d "$INSTALL_DIR/frontend" ]; then
     rm -rf "$INSTALL_DIR/backend" "$INSTALL_DIR/frontend"
 fi
 
+# Create installation directory if it doesn't exist
+mkdir -p "$INSTALL_DIR"
+
 # Get GitHub repository URL
 read -p "Enter GitHub repository URL (default: https://github.com/NoahWhiteson/OpenCore.git): " GITHUB_URL
 GITHUB_URL=${GITHUB_URL:-https://github.com/NoahWhiteson/OpenCore.git}
 
 echo ""
-echo "Cloning repository..."
+echo "Cloning OpenCore repository to $INSTALL_DIR..."
 cd "$INSTALL_DIR"
+
+# Clone the main OpenCore repository (not the install repo)
 git clone "$GITHUB_URL" temp_repo
-mv temp_repo/* temp_repo/.* . 2>/dev/null || true
-rmdir temp_repo 2>/dev/null || rm -rf temp_repo
+
+# Move backend and frontend directories to INSTALL_DIR
+if [ -d "temp_repo/backend" ]; then
+    mv temp_repo/backend "$INSTALL_DIR/"
+    echo -e "${GREEN}✓ Backend cloned${NC}"
+fi
+
+if [ -d "temp_repo/frontend" ]; then
+    mv temp_repo/frontend "$INSTALL_DIR/"
+    echo -e "${GREEN}✓ Frontend cloned${NC}"
+fi
+
+# Copy other important files if they exist
+if [ -f "temp_repo/.gitignore" ]; then
+    cp temp_repo/.gitignore "$INSTALL_DIR/" 2>/dev/null || true
+fi
+if [ -f "temp_repo/README.md" ]; then
+    cp temp_repo/README.md "$INSTALL_DIR/" 2>/dev/null || true
+fi
+
+# Clean up temp directory
+rm -rf temp_repo
+
 cd "$INSTALL_DIR"
 
 echo -e "${GREEN}✓ Repository cloned${NC}"
@@ -193,24 +211,29 @@ cd ..
 
 echo ""
 echo "Installing OpenCore CLI..."
-cd "$INSTALL_DIR/install" 2>/dev/null || cd "$(dirname "$0")"
-npm install --silent 2>/dev/null || true
 
-# Install CLI globally or create symlink
-if command_exists npm; then
-    echo "Installing OpenCore CLI..."
-    cd "$INSTALL_DIR/install"
-    npm link 2>/dev/null || {
-        echo -e "${YELLOW}Note: Could not install CLI globally. You can use:${NC}"
-        echo "  cd $INSTALL_DIR/install && npm link"
-        echo "Or run directly: node $INSTALL_DIR/install/opencore-cli.js"
-    }
+# Find the install directory (where this script is located)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Install CLI from the install directory
+if [ -d "$SCRIPT_DIR" ]; then
+    cd "$SCRIPT_DIR"
+    npm install --silent 2>/dev/null || true
+    
+    # Try to install CLI globally
+    if command_exists npm; then
+        echo "Installing OpenCore CLI globally..."
+        npm link 2>/dev/null || {
+            echo -e "${YELLOW}Note: Could not install CLI globally. To install manually:${NC}"
+            echo "  cd $SCRIPT_DIR && npm link"
+            echo "Or run directly: node $SCRIPT_DIR/opencore-cli.js"
+        }
+    fi
+    
+    # Make scripts executable
+    chmod +x "$SCRIPT_DIR/start-backend.sh" "$SCRIPT_DIR/start-frontend.sh" 2>/dev/null || true
+    chmod +x "$SCRIPT_DIR/opencore-cli.js" 2>/dev/null || true
 fi
-
-echo ""
-echo "Making start scripts executable..."
-chmod +x "$INSTALL_DIR/install/start-backend.sh" "$INSTALL_DIR/install/start-frontend.sh" 2>/dev/null || true
-chmod +x "$INSTALL_DIR/install/opencore-cli.js" 2>/dev/null || true
 
 echo ""
 echo "=========================================="
